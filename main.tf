@@ -60,7 +60,6 @@ data "jinja_template" "disk_attachment" {
     type = "yaml"
     data = yamlencode({ 
       instances = local.yaml_file.instances
-      volume_id = local.yaml_file.volume_id
     })
   }
 }

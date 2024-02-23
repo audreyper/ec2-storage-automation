@@ -23,8 +23,6 @@ settings:
   key_name: "admin-ssh-keys"
   aws_region: "us-east-1"
 
-volume_id:
-  ebs_volumes: "ebs_volumes"
 
 
 
