@@ -1,0 +1,10 @@
+
+{% for instance in instances %}
+{{ instance.name }}:
+    ami: {{ settings.ami }}
+    type: {{ settings.instance_type }}
+    key: {{ settings.key_name }}
+    az: {{ instance.availability_zone }}
+    name: {{ instance.name }}
+{% endfor %}
+

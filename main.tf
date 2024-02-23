@@ -1,51 +1,104 @@
-# Define the AWS provider with the specified region.
-provider "aws" {
-  region = var.aws_region
-}
+terraform {
+  
+      required_version = "~>1.7.2"
+      required_providers {
+        jinja = {
+           source = "NikolaLohinski/jinja"
+           version = ">=2.0.1"
+             }
+           }
+ }
 
-# Create AWS EC2 instances based on the provided parameters.
-resource "aws_instance" "ec2_instances" {
-  # Create instances based on the length of the instance names list.
-  count = length(var.instance_names)
+# Create a security group for instances 
+resource "aws_security_group" "ssh_group" {
+  name        = "ssh_group"
+  description = "Allow SSH access"
 
-  # Specify the Amazon Machine Image (AMI) ID for the instances.
-  ami = var.ami_id
-
-  # Specify the type of EC2 instances to launch.
-  instance_type = var.instance_type
-
-  # Distribute instances across different availability zones.
-  availability_zone = element(var.availability_zones, count.index % length(var.availability_zones))
-
-  # Assign names to each instance using values from the instance names list.
-  tags = {
-    Name = var.instance_names[count.index]
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow SSH access from any IP address
   }
 }
 
-# Create AWS EBS volumes based on the provided parameters.
+# Prepare jinja templates
+locals {
+  yaml_file = yamldecode(file("${path.module}/data.yml"))
+}
+
+# Prepare jinja template for instance creation block
+data "jinja_template" "instance_creation" {
+  template = "./instance_creation.j2"
+  context {
+
+    type = "yaml"
+    data = yamlencode({ 
+      instances = local.yaml_file.instances
+      settings = local.yaml_file.settings
+    })
+  }
+}
+
+# Prepare jinja template for disk creation block
+data "jinja_template" "disk_creation" {
+  template = "./disk_creation.j2"
+  context {
+
+    type = "yaml"
+    data = yamlencode({ 
+      instances = local.yaml_file.instances
+    })
+  }
+}
+
+# Prepare jinja template for disk attachment block
+data "jinja_template" "disk_attachment" {
+  template = "./disk_attachment.j2"
+  context {
+
+    type = "yaml"
+    data = yamlencode({ 
+      instances = local.yaml_file.instances
+      volume_id = local.yaml_file.volume_id
+    })
+  }
+}
+
+# Create an instance for each defined instance in data.yaml
+resource "aws_instance" "ec2_instances" {
+  for_each = {for k, v in yamldecode(data.jinja_template.instance_creation.result) : k => v }
+  ami           =  each.value.ami 
+  instance_type = each.value.type 
+  availability_zone = each.value.az 
+  tags = {
+    Name = each.value.name 
+  }
+  key_name      = each.value.key  
+  vpc_security_group_ids = [aws_security_group.ssh_group.id]
+}
+
+# Creates a volume for each instance as defined in data.yaml
 resource "aws_ebs_volume" "ebs_volumes" {
-  # Create volumes for each instance
-  count = length(var.instance_names) * length(var.disk_sizes)
-
-  # Assign availability zones to corresponding volumes.
-  availability_zone = aws_instance.ec2_instances[floor(count.index / length(var.disk_sizes))].availability_zone
-
-  # Assign sizes to volumes.
-  size = var.disk_sizes[floor(count.index % length(var.disk_sizes))]
+  for_each = {for k, v in yamldecode(data.jinja_template.disk_creation.result) : k => v }
+  availability_zone = each.value.az
+  size = each.value.size
+  tags = {
+    Name = each.value.disk_name
+  }
 }
 
-# Attach EBS volumes to EC2 instances based on the provided parameters.
-resource "aws_volume_attachment" "attach_ebs" {
-  # Attach volumes to instances for each instance and disk size combination.
-  count = length(var.instance_names) * length(var.disk_sizes)
+# Attach each volume to its corresponding instance 
+resource "aws_volume_attachment" "volume_attachment" {
+  for_each = {for k, v in yamldecode(data.jinja_template.disk_attachment.result) : k => v }
+  instance_id = aws_instance.ec2_instances[each.value.instance_id].id
+  device_name = each.value.dev_name
+  volume_id = join(",", [for k, v in aws_ebs_volume.ebs_volumes : v.id if v.tags.Name == each.value.volume_id])
 
-  # Specify the device name for each attached volume.
-  device_name = var.device_name[floor(count.index % length(var.disk_sizes))]
+  depends_on = [
+    aws_instance.ec2_instances,
+    aws_ebs_volume.ebs_volumes
+  ]
+   }
 
-  # Specify the instance ID for each attached volume.
-  instance_id = aws_instance.ec2_instances[floor(count.index / length(var.disk_sizes))].id
-
-  # Specify the volume ID for each attached volume.
-  volume_id = aws_ebs_volume.ebs_volumes[count.index].id
-}
+  

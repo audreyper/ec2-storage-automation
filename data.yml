@@ -1,0 +1,30 @@
+instances:
+  - name: instance1
+    availability_zone: us-east-1a
+    disks:
+      - name: disk-1
+        size: 10
+        device_name: /dev/sdg
+      - name: disk-2
+        size: 5
+        device_name: /dev/sdh
+  - name: instance2
+    availability_zone: us-east-1b
+    disks:
+      - name: disk-3
+        size: 15
+        device_name: /dev/sdi
+  - name: instance3
+    availability_zone: us-east-1c
+
+settings:
+  ami: "ami-0e731c8a588258d0d"
+  instance_type: "t2.micro"
+  key_name: "admin-ssh-keys"
+  aws_region: "us-east-1"
+
+volume_id:
+  ebs_volumes: "ebs_volumes"
+
+
+
