@@ -29,7 +29,7 @@ locals {
 
 # Prepare jinja template for instance creation block
 data "jinja_template" "instance_creation" {
-  template = "./instance_creation.j2"
+  template = "./templates/instance_creation.j2"
   context {
 
     type = "yaml"
@@ -41,25 +41,15 @@ data "jinja_template" "instance_creation" {
 }
 
 # Prepare jinja template for disk creation block
-data "jinja_template" "disk_creation" {
-  template = "./disk_creation.j2"
+data "jinja_template" "disk_create_attach" {
+  template = "./templates/disk_create_attach.j2"
   context {
 
     type = "yaml"
     data = yamlencode({ 
       instances = local.yaml_file.instances
-    })
-  }
-}
-
-# Prepare jinja template for disk attachment block
-data "jinja_template" "disk_attachment" {
-  template = "./disk_attachment.j2"
-  context {
-
-    type = "yaml"
-    data = yamlencode({ 
-      instances = local.yaml_file.instances
+      settings = local.yaml_file.settings
+      letters = local.yaml_file.letters
     })
   }
 }
@@ -79,20 +69,21 @@ resource "aws_instance" "ec2_instances" {
 
 # Creates a volume for each instance as defined in data.yaml
 resource "aws_ebs_volume" "ebs_volumes" {
-  for_each = {for k, v in yamldecode(data.jinja_template.disk_creation.result) : k => v }
+  for_each = {for k, v in yamldecode(data.jinja_template.disk_create_attach.result) : k => v }
   availability_zone = each.value.az
   size = each.value.size
   tags = {
     Name = each.value.disk_name
+    Dev_name = join(",", each.value.dev_name)
   }
 }
 
 # Attach each volume to its corresponding instance 
 resource "aws_volume_attachment" "volume_attachment" {
-  for_each = {for k, v in yamldecode(data.jinja_template.disk_attachment.result) : k => v }
-  instance_id = aws_instance.ec2_instances[each.value.instance_id].id
-  device_name = each.value.dev_name
-  volume_id = join(",", [for k, v in aws_ebs_volume.ebs_volumes : v.id if v.tags.Name == each.value.volume_id])
+  for_each = {for k, v in yamldecode(data.jinja_template.disk_create_attach.result) : k => v }
+  instance_id = aws_instance.ec2_instances[each.value.instance].id
+  device_name = join(",", each.value.dev_name)
+  volume_id = join(",", [for k, v in aws_ebs_volume.ebs_volumes : v.id if v.tags.Name == each.value.disk_name])
 
   depends_on = [
     aws_instance.ec2_instances,

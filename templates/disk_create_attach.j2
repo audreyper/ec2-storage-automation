@@ -1,0 +1,20 @@
+{% for instance in instances %}
+   {% if instance.disks | length > 0 %}
+      {% for disk_index in range(instance.disks | length) %}
+        {% for letter_index in range(letters | length) %}
+          {% if disk_index == letter_index %}
+            {% set disks = namespace(result=[]) %}
+            {% set disks.result = disks.result | append( "sd" ~ letters[letter_index] ) %}
+{{ instance.name }}-{{ instance.disks[disk_index].name }}:
+   instance: {{ instance.name }}
+   disk_name: {{ instance.disks[disk_index].name }}
+   dev_name: {{ disks.result }}
+   az: {{ instance.availability_zone }}
+   size: {{ instance.disks[disk_index].size }}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+  {% endif %}
+{% endfor %}
+
+  
