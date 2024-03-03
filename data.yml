@@ -2,13 +2,13 @@ instances:
   - name: instance1
     availability_zone: us-east-1a
     disks:
-      - name: disk-1  # device name = sdf
+      - name: disk-1  
         size: 10
-      - name: disk-2  # device name = sdg
+      - name: disk-2  
         size: 5
-      - name: disk-3  # device name = sdg
+      - name: disk-3  
         size: 8
-  - name: instance2   # device name = sdf
+  - name: instance2   
     availability_zone: us-east-1b
     disks:
       - name: disk-4
