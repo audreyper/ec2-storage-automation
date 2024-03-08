@@ -1,5 +1,5 @@
 terraform {
-  
+
       required_version = "~>1.7.2"
       required_providers {
         jinja = {
@@ -54,6 +54,13 @@ data "jinja_template" "disk_create_attach" {
   }
 }
 
+/*
+resource "local_file" "create_manipulated_yaml_file" {
+   content  = data.jinja_template.disk_create_attach.result
+   filename = "./ansible_data.yml"
+}
+*/
+
 # Create an instance for each defined instance in data.yaml
 resource "aws_instance" "ec2_instances" {
   for_each = {for k, v in yamldecode(data.jinja_template.instance_creation.result) : k => v }
@@ -91,4 +98,47 @@ resource "aws_volume_attachment" "volume_attachment" {
   ]
    }
 
-  
+
+locals {
+  instance_mapping = [
+    for instance in aws_instance.ec2_instances : {
+      public_ip      = instance.public_ip
+      block_devices  = [
+        for device in instance.ebs_block_device : {
+          device_name   = device.tags.Dev_name
+          name     = device.tags.Name
+        }
+      ]
+    }
+  ]
+}
+
+output "test" {
+  value = local.instance_mapping
+}
+
+
+data "template_file" "ansible_inventory" {
+  template = templatefile("${path.module}/hosts.tpl", {
+    instance_info = local.instance_mapping
+  })
+}
+
+resource "null_resource" "save_inventory" {
+  triggers = {
+    content = data.template_file.ansible_inventory.rendered
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo '${data.template_file.ansible_inventory.rendered}' > ansible_inventory.ini
+    EOT
+  }
+}
+
+
+
+
+
+
+
